@@ -74,21 +74,40 @@ int printing(void)
 #define BUFFER_SIZE 200
     char buffer[BUFFER_SIZE];
     STI_micros_t reference_micros = 1722533587123456;
-    const char expected_micros[] = "+ 2024/08/01 - 19:33:07.123456";
-    const char expected_millis[] = "+ 2024/08/01 - 19:33:07.123000";
-    STI_print_micros(buffer, BUFFER_SIZE, reference_micros, NULL);
-    if (strcmp(buffer, expected_micros) != 0)
-    {
-        return TEST_FAIL;
-    }
-    memset(buffer, 0, BUFFER_SIZE);
     STI_millis_t reference_millis = reference_micros;
     reference_millis /= (STI_millis_t)1000;
-    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, NULL);
-    if (strcmp(buffer, expected_millis) != 0)
-    {
+    STI_PO_t opt;
+
+    STI_print_micros(buffer, BUFFER_SIZE, reference_micros, NULL);
+    if (strcmp("+ 2024/08/01 - 19:33:07.123456", buffer) != 0)
         return TEST_FAIL;
-    }
+
+    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, NULL);
+    if (strcmp("+ 2024/08/01 - 19:33:07.123000", buffer) != 0)
+        return TEST_FAIL;
+
+    STI_print_options_set_default(&opt);
+    opt.seconds.show_micros = false;
+    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
+    if (strcmp("+ 2024/08/01 - 19:33:07.123", buffer) != 0)
+        return TEST_FAIL;
+
+    opt.seconds.show_millis = false;
+    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
+    if (strcmp("+ 2024/08/01 - 19:33:07", buffer) != 0)
+        return TEST_FAIL;
+
+    opt.sign.show = false;
+    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
+    if (strcmp("2024/08/01 - 19:33:07", buffer) != 0)
+        return TEST_FAIL;
+
+    opt.date.separator = "_";
+    opt.date.postfix = "* ";
+    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
+    if (strcmp("2024_08_01* 19:33:07", buffer) != 0)
+        return TEST_FAIL;
+
     return TEST_PASS;
 }
 

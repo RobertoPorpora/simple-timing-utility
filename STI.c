@@ -212,9 +212,9 @@ static char *print_seconds(char *dest, STI_PO_seconds_t *options, float seconds_
     size_t offset = 0;
     if (options->show)
     {
-        if (options->show_millis)
+        if (options->show_micros)
             offset = sprintf(dest, "%09.6f", seconds_with_decimals); // 01.234567
-        else if (options->show_micros)
+        else if (options->show_millis)
             offset = sprintf(dest, "%06.3f", seconds_with_decimals); // 01.234
         else
             offset = sprintf(dest, "%02.0f", seconds_with_decimals); // 01
