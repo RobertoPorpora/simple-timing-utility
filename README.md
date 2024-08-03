@@ -128,12 +128,13 @@ This will launch cmake, make, the compiler and then it will execute the executab
 
 After a few seconds you should see something like this in the last lines of your terminal:
 ```
+Run: "path/to/simple_timing_utility/test/bin/test" 1722682587622281
+-----START-----
 Test started.
 Absolute timers test: PASS.
 Relative timers test: PASS.
 Printing test: PASS.
 All tests finished successfully.
-
-
-Reached end of run.py
+process finished with return code 0
+-----END-----
 ```

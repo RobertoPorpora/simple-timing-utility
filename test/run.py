@@ -1,78 +1,79 @@
-import sys
 import os
-import shutil
 import subprocess
 import time
-import ctypes
-
-
-#-------------------------------------------------------------------------------
 
 def main():
-    project_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(project_dir)
-    build_dir = os.path.join(project_dir, "build")
+    root_folder = os.path.dirname(os.path.abspath(__file__))
+    build_folder = os.path.join(root_folder, 'build')
+    bin_folder = os.path.join(root_folder, 'bin')
+    executable = os.path.join(bin_folder, 'test')
+    if os.name == 'nt':
+        executable += '.exe'
+
+    clean_directory(build_folder)
+    clean_directory(bin_folder)
+
+    # configure
+    root_folder_str = stringify_path(root_folder)
+    build_folder_str = stringify_path(build_folder)
+    build_system = '"Unix Makefiles"'
+    if os.name == 'nt':
+        build_system = '"MinGW Makefiles"'
+    build_type = '-DCMAKE_BUILD_TYPE=Debug'
+    run(['cmake', '-S', root_folder_str, '-B', build_folder_str, '-G', build_system, build_type])
+
+    # build
+    run(['cmake', '--build', build_folder_str])
+
+    # run
+    run([stringify_path(executable), stringified_time_micros()])
+
+
+def stringified_time_micros() -> str:
+    output = time.time() * 1000 * 1000
+    output = int(output)
+    return str(output)
+
+
+def run(cmd: list[str]) -> None:
     
-    print(f"Removing build directory: {build_dir}")
-    shutil.rmtree(build_dir, ignore_errors=True)
+    command = None
 
-    print(f"Creating build directory: {build_dir}")
-    os.makedirs(build_dir, exist_ok=True)
+    if isinstance(cmd, str):
+        command = cmd
+    elif isinstance(cmd, list) and all(isinstance(item, str) for item in cmd):
+        command = ' '.join(cmd)
+    else:
+        raise ValueError("Argument type invalid, must be 'str' or 'list[str]'")
 
-    build_system = '\"Unix Makefiles\"'
-    if os.name == "nt":
-        build_system = '\"MinGW Makefiles\"'
+    print()
+    print(f"Run: {command}")
+    print(f"-----START-----")
     
-    # Run cmake configure
-    if not run_command(f"cmake -S \"{parent_dir}\" -B \"{build_dir}\" -G {build_system} -DBUILD_TEST=ON -DCMAKE_BUILD_TYPE=Debug"):
-        return
+    try:
+        completed_process = subprocess.run(command, shell=True, check=True)
+        print(f"process finished with return code {completed_process.returncode}")
+    except subprocess.CalledProcessError as cpe:
+        print(cpe)
+    except Exception as e:
+        print(f"generic error: {e}")
 
-    # Run cmake build
-    if not run_command(f"cmake --build \"{build_dir}\""):
-        return
+    print(f"-----END-----")
+    print()
 
-    # Find generated executable
-    executable = os.path.join(build_dir, "test", "test")
-    if os.name == "nt":
-        executable += ".exe"
+def clean_directory(path: str) -> None:
+    if os.path.exists(path):
+        for root, dirs, files in os.walk(path, topdown=False):
+            for name in files:
+                file_path = os.path.join(root, name)
+                os.remove(file_path)
+            for name in dirs:
+                dir_path = os.path.join(root, name)
+                os.rmdir(dir_path)
+        os.rmdir(path)
+    os.makedirs(path, exist_ok=True)
     
-    # run it
-    run_command(f"\"{executable}\" {int(time.time() * 1000 * 1000)}")
+def stringify_path(path: str) -> str:
+    return f'"{path}"'    
 
-    print("\nReached end of run.py")
-    
-#-------------------------------------------------------------------------------
-
-def run_command(command):
-    print(f"\nRunning command {command}\n")
-    process = subprocess.Popen(
-        command,
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        bufsize=1,
-        universal_newlines=True
-    )
-    
-    with process.stdout:
-        for line in process.stdout:
-            print(line, end='')
-
-    with process.stderr:
-        for line in process.stderr:
-            print(line, end='', file=sys.stderr)
-    
-    returncode = process.wait()
-
-    if returncode != 0:
-        print(f"ERROR: command terminated with exit code {os.strerror(returncode)}\n", file=sys.stderr)
-        return False
-    print("")
-    return True
-
-#-------------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    main()
-
-#-------------------------------------------------------------------------------
+main()
