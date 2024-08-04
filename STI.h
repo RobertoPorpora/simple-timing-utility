@@ -26,7 +26,6 @@ STI_millis_t STI_millis();
 void STI_timer_start(STI_timer_t *timer);
 STI_micros_t STI_elapsed_micros(STI_timer_t timer);
 STI_millis_t STI_elapsed_millis(STI_timer_t timer);
-void STI_sleep_millis(STI_millis_t millis);
 
 /**
  * PRINTING
@@ -62,14 +61,29 @@ typedef struct STI_PO_seconds_t
     const char *postfix; // set to NULL for default value
 } STI_PO_seconds_t;
 
+typedef struct STI_PO_general_t
+{
+    bool negative_means_pre_epoch;
+    bool use_local_time_zone;
+} STI_PO_general_t;
+
 typedef struct STI_PO_t
 {
+    STI_PO_general_t general;
     STI_PO_sign_t sign;
     STI_PO_date_t date;
     STI_PO_hours_minutes_t hours_minutes;
     STI_PO_seconds_t seconds;
 } STI_PO_t;
 
+void STI_PO_set_default(STI_PO_t *options);
+
 char *STI_print_micros(char *dest, size_t size, STI_micros_t micros, STI_PO_t *options);
 char *STI_print_millis(char *dest, size_t size, STI_millis_t millis, STI_PO_t *options);
-void STI_print_options_set_default(STI_PO_t *options);
+
+/**
+ * GENERIC HELPERS
+ */
+
+void STI_sleep_millis(STI_millis_t millis);
+STI_micros_t STI_time_zone_offset(void);

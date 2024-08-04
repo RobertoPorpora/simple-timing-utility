@@ -1,150 +1,121 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <inttypes.h>
-#include <stdbool.h>
+#include <time.h>
 
-#include "../STI.h"
+#include <STI.h>
+#include <unity.h>
 
-#define TEST_PASS 0
-#define TEST_FAIL -1
+// -----------------------------------------------------------------------------
 
-#define assert_equal_or_bigger(x, ref) \
-    if (x < ref)                       \
-    return TEST_FAIL
-
-#define assert_smaller_or_equal(x, ref) \
-    if (x > ref)                        \
-    return TEST_FAIL
-
-int absolute_timers(STI_micros_t reference_micros)
+void setUp(void)
 {
-    STI_micros_t actual_micros = STI_micros();
-    STI_millis_t actual_millis = STI_millis();
-
-    STI_micros_t diff_micros = reference_micros - actual_micros;
-    STI_micros_t acceptable_diff_micros = 1 * 1000 * 1000; // one second
-    assert_equal_or_bigger(diff_micros, -acceptable_diff_micros);
-    assert_smaller_or_equal(diff_micros, acceptable_diff_micros);
-
-    STI_millis_t reference_millis = reference_micros / 1000;
-    STI_millis_t diff_millis = actual_millis - reference_millis;
-    STI_millis_t acceptable_diff_millis = acceptable_diff_micros / 1000;
-
-    assert_equal_or_bigger(diff_millis, -acceptable_diff_millis);
-    assert_smaller_or_equal(diff_millis, acceptable_diff_millis);
-
-    return TEST_PASS;
+    // nothing to do here
 }
 
-int relative_timers(void)
-{
-#define MARGIN_MILLIS 400                    // ms
-#define MARGIN_MICROS (MARGIN_MILLIS * 1000) // us
-#define SLEEP_MILLIS 1000                    // ms
-#define SLEEP_MICROS (SLEEP_MILLIS * 1000)   // ms
+void absolute_timers(void);
+void relative_timers(void);
+void printing_timers(void);
 
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(absolute_timers);
+    RUN_TEST(relative_timers);
+    RUN_TEST(printing_timers);
+    return UNITY_END();
+}
+
+void tearDown(void)
+{
+    // nothing to do here
+}
+
+// -----------------------------------------------------------------------------
+
+const int64_t S_TO_uS = 1000 * 1000; // seconds to microseconds
+const int64_t S_TO_mS = 1000;        // seconds to milliseconds
+const int64_t mS_TO_uS = 1000;       // milliseconds to microseconds
+
+void absolute_timers(void)
+{
+    TEST_ASSERT_INT64_WITHIN(2 * S_TO_uS, time(NULL) * S_TO_uS, STI_micros());
+    TEST_ASSERT_INT64_WITHIN(2 * S_TO_mS, time(NULL) * S_TO_mS, STI_millis());
+}
+
+void relative_timers(void)
+{
     STI_timer_t timer;
+    const STI_millis_t SLEEP_mS = 250;
+    const STI_millis_t MARGIN_mS = 50;
+    const STI_millis_t SLEEP_uS = SLEEP_mS * mS_TO_uS;
+    const STI_millis_t MARGIN_uS = MARGIN_mS * mS_TO_uS;
     STI_timer_start(&timer);
-    STI_micros_t micros;
-    STI_millis_t millis;
-
-    micros = STI_elapsed_micros(timer);
-    millis = STI_elapsed_millis(timer);
-    assert_equal_or_bigger(micros, 0);
-    assert_smaller_or_equal(micros, 0 + MARGIN_MICROS);
-    assert_equal_or_bigger(millis, 0);
-    assert_smaller_or_equal(millis, 0 + MARGIN_MILLIS);
-
-    STI_sleep_millis(SLEEP_MILLIS);
-
-    micros = STI_elapsed_micros(timer);
-    millis = STI_elapsed_millis(timer);
-    assert_equal_or_bigger(micros, SLEEP_MICROS);
-    assert_smaller_or_equal(micros, SLEEP_MICROS + MARGIN_MICROS);
-    assert_equal_or_bigger(millis, SLEEP_MILLIS);
-    assert_smaller_or_equal(millis, SLEEP_MILLIS + MARGIN_MILLIS);
-
-    return TEST_PASS;
+    STI_sleep_millis(SLEEP_mS);
+    TEST_ASSERT_INT64_WITHIN(MARGIN_uS, SLEEP_uS, STI_elapsed_micros(timer));
+    TEST_ASSERT_INT64_WITHIN(MARGIN_mS, SLEEP_mS, STI_elapsed_millis(timer));
 }
 
-int printing(void)
+void printing_timers(void)
 {
-#define BUFFER_SIZE 200
-    char buffer[BUFFER_SIZE];
-    STI_micros_t reference_micros = 1722533587123456;
-    STI_millis_t reference_millis = reference_micros;
-    reference_millis /= (STI_millis_t)1000;
-    STI_PO_t opt;
+    const STI_micros_t MICROS_REF = 1234567890123456; // UTC 2009-02-13 23:31:30.123456
+    const STI_millis_t MILLIS_REF = MICROS_REF / 1000;
+    const STI_micros_t NEG_MICROS_REF = -123456789123456; // UTC 1966-02-02 02:26:51.123456
 
-    STI_print_micros(buffer, BUFFER_SIZE, reference_micros, NULL);
-    if (strcmp("+ 2024/08/01 - 19:33:07.123456", buffer) != 0)
-        return TEST_FAIL;
+    STI_PO_t po;
+    STI_PO_set_default(&po);
 
-    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, NULL);
-    if (strcmp("+ 2024/08/01 - 19:33:07.123000", buffer) != 0)
-        return TEST_FAIL;
+    const size_t BUF_SIZE = 200;
+    char buf[BUF_SIZE];
 
-    STI_print_options_set_default(&opt);
-    opt.seconds.show_micros = false;
-    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
-    if (strcmp("+ 2024/08/01 - 19:33:07.123", buffer) != 0)
-        return TEST_FAIL;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF - STI_time_zone_offset(), &po);
+    TEST_ASSERT_EQUAL_STRING("+ 2009/02/13 - 23:31:30.123456", buf);
 
-    opt.seconds.show_millis = false;
-    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
-    if (strcmp("+ 2024/08/01 - 19:33:07", buffer) != 0)
-        return TEST_FAIL;
+    po.general.use_local_time_zone = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("+ 2009/02/13 - 23:31:30.123456", buf);
 
-    opt.sign.show = false;
-    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
-    if (strcmp("2024/08/01 - 19:33:07", buffer) != 0)
-        return TEST_FAIL;
+    po.general.negative_means_pre_epoch = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("+ 2009/02/13 - 23:31:30.123456", buf);
+    STI_print_millis(buf, BUF_SIZE, MILLIS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("+ 2009/02/13 - 23:31:30.123000", buf);
 
-    opt.date.separator = "_";
-    opt.date.postfix = "* ";
-    STI_print_millis(buffer, BUFFER_SIZE, reference_millis, &opt);
-    if (strcmp("2024_08_01* 19:33:07", buffer) != 0)
-        return TEST_FAIL;
+    po.sign.postfix = "qwe";
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("+qwe2009/02/13 - 23:31:30.123456", buf);
+    po.sign.show = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("2009/02/13 - 23:31:30.123456", buf);
+    po.date.separator = "__";
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("2009__02__13 - 23:31:30.123456", buf);
+    po.date.postfix = "**";
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("2009__02__13**23:31:30.123456", buf);
+    po.date.show = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("23:31:30.123456", buf);
+    po.hours_minutes.separator = "$$";
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("23$$31:30.123456", buf);
+    po.hours_minutes.postfix = "££";
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("23$$31££30.123456", buf);
+    po.hours_minutes.show = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("30.123456", buf);
+    po.seconds.postfix = " iii";
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("30.123456 iii", buf);
+    po.seconds.show_micros = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("30.123 iii", buf);
+    po.seconds.show_millis = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("30 iii", buf);
+    po.seconds.show = false;
+    STI_print_micros(buf, BUF_SIZE, MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("", buf);
 
-    return TEST_PASS;
-}
-
-#define run(test)          \
-    if (test == TEST_PASS) \
-    {                      \
-        printf("PASS.\n"); \
-    }                      \
-    else                   \
-    {                      \
-        success = false;   \
-        printf("FAIL.\n"); \
-    }
-
-int main(int argc, char **argv)
-{
-    bool success = true;
-    printf("Test started.\n");
-
-    STI_micros_t reference_micros = 0;
-    if (argc > 1)
-        sscanf(argv[1], "%" SCNi64, &reference_micros);
-
-    printf("Absolute timers test: ");
-    run(absolute_timers(reference_micros));
-
-    printf("Relative timers test: ");
-    run(relative_timers());
-
-    printf("Printing test: ");
-    run(printing());
-
-    if (success)
-    {
-        printf("All tests finished successfully.\n");
-        return TEST_PASS;
-    }
-    printf("Test FAILED.\n");
-    return TEST_FAIL;
+    STI_PO_set_default(&po);
+    STI_print_micros(buf, BUF_SIZE, NEG_MICROS_REF, &po);
+    TEST_ASSERT_EQUAL_STRING("+ \?\?\?\?/\?\?/\?\? - \?\?:\?\?:50.876544", buf);
 }

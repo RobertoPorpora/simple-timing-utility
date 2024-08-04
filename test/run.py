@@ -28,13 +28,7 @@ def main():
     run(['cmake', '--build', build_folder_str])
 
     # run
-    run([stringify_path(executable), stringified_time_micros()])
-
-
-def stringified_time_micros() -> str:
-    output = time.time() * 1000 * 1000
-    output = int(output)
-    return str(output)
+    run(stringify_path(executable))
 
 
 # ------------------------------------------------------------------------------

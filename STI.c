@@ -1,12 +1,13 @@
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "STI.h"
 
 #ifdef _WIN32
 
-#include <Windows.h>
+#include <windows.h>
 
 STI_micros_t STI_micros()
 {
@@ -18,7 +19,8 @@ STI_micros_t STI_micros()
     return (ui.QuadPart / 10) - 11644473600000000ULL;
 }
 
-#define localtime_cross_platform(tm_ptr, sec) localtime_s(tm_ptr, sec)
+#define localtime_thread_safe(tm_ptr, sec_ptr) localtime_s(tm_ptr, sec_ptr)
+#define gmtime_thread_safe(tm_ptr, sec_ptr) gmtime_s(tm_ptr, sec_ptr)
 
 #else
 
@@ -32,7 +34,8 @@ STI_micros_t STI_micros()
     return (STI_micros_t)tv.tv_sec * 1000000 + (STI_micros_t)tv.tv_usec;
 }
 
-#define localtime_cross_platform(tm_ptr, sec) localtime_r(sec, tm_ptr)
+#define localtime_thread_safe(tm_ptr, sec_ptr) localtime_r(sec_ptr, tm_ptr)
+#define gmtime_thread_safe(tm_ptr, sec_ptr) gmtime_r(se_ptr, tm_ptr)
 
 #endif
 
@@ -57,22 +60,6 @@ STI_millis_t STI_elapsed_millis(STI_timer_t timer)
 {
     return STI_elapsed_micros(timer) / 1000;
 }
-
-#ifdef _WIN32
-
-void STI_sleep_millis(STI_millis_t millis)
-{
-    Sleep(millis);
-}
-
-#else
-
-void STI_sleep_millis(STI_millis_t millis)
-{
-    usleep(millis * 1000);
-}
-
-#endif
 
 // -----------------------------------------------------------------------------
 
@@ -138,13 +125,13 @@ size_t min_size_needed(STI_PO_t *options)
 
 #define ptr_shift(ptr, shift) ptr = &ptr[shift]
 
-static char *print_sign(char *dest, STI_PO_sign_t *options, STI_micros_t micros)
+static char *print_sign(char *dest, STI_PO_sign_t *options, bool is_negative)
 {
     size_t offset = 0;
 
     if (options->show)
     {
-        if (micros < 0)
+        if (is_negative)
             offset = sprintf(dest, "-%s", options->postfix);
         else
             offset = sprintf(dest, "+%s", options->postfix);
@@ -155,70 +142,124 @@ static char *print_sign(char *dest, STI_PO_sign_t *options, STI_micros_t micros)
     return dest;
 }
 
+#define date_error(time_info_ptr) (-1 == (time_info_ptr)->tm_mon)
+
 static char *print_date_hours_minutes(char *dest, STI_PO_t *options, time_t seconds)
 {
-    struct tm tm_info;
-    localtime_cross_platform(&tm_info, &seconds);
+    struct tm time_info;
+
+    if (options->general.use_local_time_zone)
+    {
+        localtime_thread_safe(&time_info, &seconds);
+        if (date_error(&time_info))
+        {
+            gmtime_thread_safe(&time_info, &seconds);
+        }
+    }
+    else
+    {
+        gmtime_thread_safe(&time_info, &seconds);
+    }
 
     size_t offset = 0;
     if (options->date.show)
     {
-        offset = sprintf(
-            dest // destination string
-            ,
-            "%04d" // year
-            "%s"   // separator
-            "%02d" // month
-            "%s"   // separator
-            "%02d" // day
-            "%s"   // postfix
-            ,
-            tm_info.tm_year + 1900,  // year
-            options->date.separator, // separator
-            tm_info.tm_mon + 1,      // month
-            options->date.separator, // separator
-            tm_info.tm_mday,         // day
-            options->date.postfix    // postfix
-        );
-
+        if (!date_error(&time_info))
+        {
+            offset = sprintf(
+                dest // destination string
+                ,
+                "%04d" // year
+                "%s"   // separator
+                "%02d" // month
+                "%s"   // separator
+                "%02d" // day
+                "%s"   // postfix
+                ,
+                time_info.tm_year + 1900, // year
+                options->date.separator,  // separator
+                time_info.tm_mon + 1,     // month
+                options->date.separator,  // separator
+                time_info.tm_mday,        // day
+                options->date.postfix     // postfix
+            );
+        }
+        else
+        {
+            offset = sprintf(
+                dest // destination string
+                ,
+                "????" // year
+                "%s"   // separator
+                "??"   // month
+                "%s"   // separator
+                "??"   // day
+                "%s"   // postfix
+                ,
+                options->date.separator, // separator
+                options->date.separator, // separator
+                options->date.postfix    // postfix
+            );
+        }
         ptr_shift(dest, offset);
     }
 
     if (options->hours_minutes.show)
     {
-        offset = sprintf(
-            dest // destination string
-            ,
-            "%02d" // hour
-            "%s"   // separator
-            "%02d" // minutes
-            "%s"   // postfix
-            ,
-            tm_info.tm_hour,                  // hour
-            options->hours_minutes.separator, // separator
-            tm_info.tm_min,                   // minutes
-            options->hours_minutes.postfix    // postfix
-        );
-
+        if (!date_error(&time_info))
+        {
+            offset = sprintf(
+                dest // destination string
+                ,
+                "%02d" // hour
+                "%s"   // separator
+                "%02d" // minutes
+                "%s"   // postfix
+                ,
+                time_info.tm_hour,                // hour
+                options->hours_minutes.separator, // separator
+                time_info.tm_min,                 // minutes
+                options->hours_minutes.postfix    // postfix
+            );
+        }
+        else
+        {
+            offset = sprintf(
+                dest // destination string
+                ,
+                "??" // hour
+                "%s" // separator
+                "??" // minutes
+                "%s" // postfix
+                ,
+                options->hours_minutes.separator, // separator
+                options->hours_minutes.postfix    // postfix
+            );
+        }
         ptr_shift(dest, offset);
     }
 
     return dest;
 }
 
-static char *print_seconds(char *dest, STI_PO_seconds_t *options, float seconds_with_decimals)
+static char *print_seconds(char *dest, STI_PO_seconds_t *options, STI_micros_t integer_part, STI_micros_t decimal_part)
 {
-    // in comments, example with input 1.234567 (1 second, 234 millis and 567 micros)
     size_t offset = 0;
     if (options->show)
     {
-        if (options->show_micros)
-            offset = sprintf(dest, "%09.6f", seconds_with_decimals); // 01.234567
-        else if (options->show_millis)
-            offset = sprintf(dest, "%06.3f", seconds_with_decimals); // 01.234
-        else
-            offset = sprintf(dest, "%02.0f", seconds_with_decimals); // 01
+        offset = sprintf(dest, "%02" PRIu64, integer_part);
         ptr_shift(dest, offset);
+
+        if (options->show_micros)
+        {
+            offset = sprintf(dest, ".%06" PRIu64, decimal_part);
+            ptr_shift(dest, offset);
+        }
+        else if (options->show_millis)
+        {
+            offset = sprintf(dest, ".%03" PRIu64, decimal_part / 1000);
+            ptr_shift(dest, offset);
+        }
 
         offset = sprintf(dest, "%s", options->postfix);
         ptr_shift(dest, offset);
@@ -261,8 +302,11 @@ static void fill_options_seconds(STI_PO_seconds_t *options)
         options->postfix = DEFAULT_SECONDS_POSTFIX;
 }
 
-void STI_print_options_set_default(STI_PO_t *options)
+void STI_PO_set_default(STI_PO_t *options)
 {
+    options->general.negative_means_pre_epoch = true;
+    options->general.use_local_time_zone = true;
+
     options->sign.show = true;
     options->sign.postfix = NULL;
     fill_options_sign(&(options->sign));
@@ -290,6 +334,8 @@ char *STI_print_micros(char *dest, size_t size, STI_micros_t micros, STI_PO_t *o
     if (dest == NULL)
         return NULL;
 
+    char *initial_dest = dest;
+
     // fill options
     STI_PO_t opt;
     if (NULL != options)
@@ -298,7 +344,7 @@ char *STI_print_micros(char *dest, size_t size, STI_micros_t micros, STI_PO_t *o
     }
     else
     {
-        STI_print_options_set_default(&opt);
+        STI_PO_set_default(&opt);
     }
     fill_options_sign(&(opt.sign));
     fill_options_date(&(opt.date));
@@ -309,33 +355,49 @@ char *STI_print_micros(char *dest, size_t size, STI_micros_t micros, STI_PO_t *o
     if (size < min_size_needed(&opt))
         return NULL;
 
-    // print sign
-    dest = print_sign(dest, &(opt.sign), micros);
+    // split parts
+    const STI_micros_t MICROS_IN_ONE_SECOND = 1000 * 1000;
+    const STI_micros_t MICROS_IN_ONE_MINUTE = 60 * MICROS_IN_ONE_SECOND;
 
-    // remove sign
-    if (micros < 0)
-        micros = -micros;
+    bool is_negative;
+    time_t hours_minutes;
+    STI_micros_t seconds;
+    STI_micros_t integer_part;
+    STI_micros_t decimal_part;
+    if (opt.general.negative_means_pre_epoch)
+    {
+        is_negative = false;
+        hours_minutes = micros / MICROS_IN_ONE_SECOND;
+        seconds = micros % MICROS_IN_ONE_MINUTE;
+        if (seconds < 0)
+        {
+            seconds += MICROS_IN_ONE_MINUTE;
+        }
+    }
+    else
+    {
+        is_negative = micros < 0;
+        if (is_negative)
+        {
+            hours_minutes = -(micros / MICROS_IN_ONE_SECOND);
+            seconds = -(micros % MICROS_IN_ONE_MINUTE);
+        }
+        else
+        {
+            hours_minutes = micros / MICROS_IN_ONE_SECOND;
+            seconds = micros % MICROS_IN_ONE_MINUTE;
+        }
+    }
+    integer_part = seconds / MICROS_IN_ONE_SECOND;
+    decimal_part = seconds % MICROS_IN_ONE_SECOND;
 
-    // backup value
-    STI_micros_t micros_backup = micros;
+    dest = print_sign(dest, &(opt.sign), is_negative);
+    dest = print_date_hours_minutes(dest, &(opt), hours_minutes);
+    dest = print_seconds(dest, &(opt.seconds), integer_part, decimal_part);
 
-    // converts micros to seconds
-    micros = micros / (1000 * 1000);
-    time_t seconds = micros;
-
-    // print date, hours and minutes
-    dest = print_date_hours_minutes(dest, &(opt), seconds);
-
-    // extract seconds and decimals from previous backup
-    const STI_micros_t ONE_MINUTE = 60 * 1000 * 1000;
-    micros_backup = micros_backup % ONE_MINUTE;
-    float seconds_with_decimals = micros_backup;
-    const float MICROS_IN_ONE_SECOND = 1000 * 1000;
-    // move the decimal point, example: 1234567.0 -> 1.234567
-    seconds_with_decimals /= MICROS_IN_ONE_SECOND;
-
-    // print seconds with decimals
-    dest = print_seconds(dest, &(opt.seconds), seconds_with_decimals);
+    // if nothing has been printed, terminate the string on the first char
+    if (initial_dest == dest)
+        *dest = '\0';
 
     // return shifted pointer
     return dest;
@@ -344,4 +406,29 @@ char *STI_print_micros(char *dest, size_t size, STI_micros_t micros, STI_PO_t *o
 char *STI_print_millis(char *dest, size_t size, STI_millis_t millis, STI_PO_t *options)
 {
     return STI_print_micros(dest, size, (STI_micros_t)millis * (STI_micros_t)1000, options);
+}
+
+// -----------------------------------------------------------------------------
+
+void STI_sleep_millis(STI_millis_t millis)
+{
+#ifdef _WIN32
+    Sleep(millis);
+#else
+    usleep(millis * 1000);
+#endif
+}
+
+STI_micros_t STI_time_zone_offset(void)
+{
+    time_t seconds = time(NULL);
+    struct tm tm_info_local;
+    struct tm tm_info_utc;
+
+    localtime_thread_safe(&tm_info_local, &seconds);
+    gmtime_thread_safe(&tm_info_utc, &seconds);
+
+    STI_micros_t offset = mktime(&tm_info_local) - mktime(&tm_info_utc);
+    offset *= 1000 * 1000;
+    return offset;
 }
