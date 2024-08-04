@@ -117,5 +117,9 @@ void printing_timers(void)
 
     STI_PO_set_default(&po);
     STI_print_micros(buf, BUF_SIZE, NEG_MICROS_REF, &po);
+#ifdef _WIN32
     TEST_ASSERT_EQUAL_STRING("+ \?\?\?\?/\?\?/\?\? - \?\?:\?\?:50.876544", buf);
+#else
+    TEST_ASSERT_EQUAL_STRING("+ 1966/02/02 - 03:26:50.876544", buf);
+#endif
 }

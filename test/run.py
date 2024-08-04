@@ -8,7 +8,7 @@ def main():
     root_folder = os.path.dirname(os.path.abspath(__file__))
     build_folder = os.path.join(root_folder, 'build')
     bin_folder = os.path.join(root_folder, 'bin')
-    executable = os.path.join(bin_folder, 'test')
+    executable = os.path.join(bin_folder, 'test_simple_timing_utility')
     if os.name == 'nt':
         executable += '.exe'
 

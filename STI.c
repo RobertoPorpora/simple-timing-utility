@@ -35,7 +35,7 @@ STI_micros_t STI_micros()
 }
 
 #define localtime_thread_safe(tm_ptr, sec_ptr) localtime_r(sec_ptr, tm_ptr)
-#define gmtime_thread_safe(tm_ptr, sec_ptr) gmtime_r(se_ptr, tm_ptr)
+#define gmtime_thread_safe(tm_ptr, sec_ptr) gmtime_r(sec_ptr, tm_ptr)
 
 #endif
 
